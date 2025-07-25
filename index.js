@@ -1,17 +1,39 @@
-const axios = require('axios');
+const { default: makeWASocket, useSingleFileAuthState } = require("@whiskeysockets/baileys");
+const { Boom } = require("@hapi/boom");
 
-console.log("🤖 Chatbot aktif...");
+// Autentikasi WA disimpan di auth.json
+const { state, saveState } = useSingleFileAuthState('./auth.json');
 
-setInterval(() => {
-  console.log("⏰ Bot masih hidup", new Date().toLocaleTimeString());
+async function startBot() {
+  const sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: true,
+  });
 
-  // Contoh: Panggil API publik (GitHub)
-  axios.get('https://api.github.com')
-    .then(response => {
-      console.log("📡 Data GitHub:", response.data.current_user_url);
-    })
-    .catch(error => {
-      console.error("❌ Gagal ambil data:", error.message);
-    });
+  sock.ev.on('connection.update', (update) => {
+    const { connection, lastDisconnect } = update;
+    if (connection === 'close') {
+      const shouldReconnect = (lastDisconnect.error = Boom)?.output?.statusCode !== 401;
+      console.log('❌ Koneksi terputus. Reconnect:', shouldReconnect);
+      if (shouldReconnect) startBot();
+    } else if (connection === 'open') {
+      console.log('✅ Bot WhatsApp aktif dan terhubung!');
+    }
+  });
 
-}, 10000); // tiap 10 detik
+  sock.ev.on('creds.update', saveState);
+
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe) return;
+
+    const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+    console.log(`📩 Pesan masuk dari ${msg.key.remoteJid}:`, text);
+
+    if (text === 'halo') {
+      await sock.sendMessage(msg.key.remoteJid, { text: 'Hai juga 👋 ini bot WhatsApp dengan Baileys!' });
+    }
+  });
+}
+
+startBot();
