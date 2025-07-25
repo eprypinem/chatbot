@@ -1,39 +1,59 @@
-const { default: makeWASocket, useSingleFileAuthState } = require("@whiskeysockets/baileys");
-const { Boom } = require("@hapi/boom");
+const { default: makeWASocket, DisconnectReason } = require('@whiskeysockets/baileys');
+const { useSingleFileAuthState } = require('@whiskeysockets/baileys/auth');
+const { Boom } = require('@hapi/boom');
 
-// Autentikasi WA disimpan di auth.json
 const { state, saveState } = useSingleFileAuthState('./auth.json');
 
-async function startBot() {
+async function startSock() {
   const sock = makeWASocket({
     auth: state,
     printQRInTerminal: true,
   });
 
+  sock.ev.on('creds.update', saveState);
+
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect } = update;
+
     if (connection === 'close') {
-      const shouldReconnect = (lastDisconnect.error = Boom)?.output?.statusCode !== 401;
-      console.log('❌ Koneksi terputus. Reconnect:', shouldReconnect);
-      if (shouldReconnect) startBot();
-    } else if (connection === 'open') {
-      console.log('✅ Bot WhatsApp aktif dan terhubung!');
+      const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+      console.log('🔌 Koneksi ditutup. Alasan:', reason);
+
+      if (reason !== DisconnectReason.loggedOut) {
+        startSock();
+      } else {
+        console.log('❌ Logout. Scan QR ulang.');
+      }
+    }
+
+    if (connection === 'open') {
+      console.log('✅ Koneksi berhasil ke WhatsApp!');
     }
   });
-
-  sock.ev.on('creds.update', saveState);
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
     if (!msg.message || msg.key.fromMe) return;
 
-    const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-    console.log(`📩 Pesan masuk dari ${msg.key.remoteJid}:`, text);
+    const sender = msg.key.remoteJid;
+    const pesan = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
-    if (text === 'halo') {
-      await sock.sendMessage(msg.key.remoteJid, { text: 'Hai juga 👋 ini bot WhatsApp dengan Baileys!' });
+    console.log(`📩 ${sender} => ${pesan}`);
+
+    if (pesan.toLowerCase() === 'halo') {
+      await sock.sendMessage(sender, { text: 'Hai juga! 👋 Bot WhatsApp aktif.' });
     }
   });
 }
 
-startBot();
+startSock();
+
+// =====================
+// Tambahan web server agar Railway aktif terus
+// =====================
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => res.send('🤖 Bot WhatsApp aktif di Railway!'));
+app.listen(PORT, () => console.log(`🌐 Server aktif di port ${PORT}`));

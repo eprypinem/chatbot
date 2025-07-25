@@ -1,18 +1,14 @@
 {
   "name": "chatbot",
   "version": "1.0.0",
-  "description": "Simple chatbot for Railway demo",
+  "description": "Simple WhatsApp bot using Baileys",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.18",
-    "axios": "^1.11.0",
     "express": "^5.1.0"
   }
 }
